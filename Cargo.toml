@@ -1,0 +1,26 @@
+[package]
+name = "replay-rs"
+version = "0.1.0"
+edition = "2021"
+description = "A Rust library for recording and replaying terminal sessions with timing data"
+license = "MIT"
+repository = "https://github.com/trozz/replay-rs"
+keywords = ["terminal", "session", "recording", "scriptreplay", "asciinema"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["trozz"]
+
+[[bin]]
+name = "recorder"
+path = "src/bin/recorder.rs"
+
+[[bin]]
+name = "player"
+path = "src/bin/player.rs"
+
+[[bin]]
+name = "replay"
+path = "src/bin/replay.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.4", features = ["derive"] }
