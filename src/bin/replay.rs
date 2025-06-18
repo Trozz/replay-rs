@@ -1,5 +1,5 @@
 //! Combined terminal session recorder and player
-//! 
+//!
 //! A unified CLI tool for both recording and replaying terminal sessions.
 //! Choose between record and play modes with a simple subcommand interface.
 
@@ -88,7 +88,10 @@ fn main() -> Result<()> {
                 println!("📹 Recording command: {} {}", command, args.join(" "));
                 println!("📄 Output file: {}", output);
                 println!("⏱️  Timing file: {}", timing_file);
-                println!("📝 Format: {}", if plain_text { "Plain text" } else { "Binary" });
+                println!(
+                    "📝 Format: {}",
+                    if plain_text { "Plain text" } else { "Binary" }
+                );
                 println!();
             }
 
@@ -132,7 +135,10 @@ fn main() -> Result<()> {
                 if !dump {
                     println!("🚀 Speed: {}x", speed);
                 }
-                println!("📺 Mode: {}", if dump { "Fast dump" } else { "Timed replay" });
+                println!(
+                    "📺 Mode: {}",
+                    if dump { "Fast dump" } else { "Timed replay" }
+                );
                 println!();
             }
 

@@ -1,5 +1,5 @@
 //! Terminal session player
-//! 
+//!
 //! A simple CLI tool for replaying recorded terminal sessions with timing data.
 //! Supports speed control and different playback modes.
 
@@ -37,7 +37,9 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Determine timing file name
-    let timing_file = cli.timing.unwrap_or_else(|| format!("{}.timing", cli.session_file));
+    let timing_file = cli
+        .timing
+        .unwrap_or_else(|| format!("{}.timing", cli.session_file));
 
     if cli.verbose {
         println!("🎬 Session file: {}", cli.session_file);
@@ -45,7 +47,14 @@ fn main() -> Result<()> {
         if !cli.dump {
             println!("🚀 Speed: {}x", cli.speed);
         }
-        println!("📺 Mode: {}", if cli.dump { "Fast dump" } else { "Timed replay" });
+        println!(
+            "📺 Mode: {}",
+            if cli.dump {
+                "Fast dump"
+            } else {
+                "Timed replay"
+            }
+        );
         println!();
     }
 

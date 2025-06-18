@@ -1,5 +1,5 @@
 //! Terminal session recorder
-//! 
+//!
 //! A simple CLI tool for recording terminal sessions with timing data.
 //! Records command execution and saves both output and timing information
 //! for later replay.
@@ -43,13 +43,26 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Determine timing file name
-    let timing_file = cli.timing.unwrap_or_else(|| format!("{}.timing", cli.output));
+    let timing_file = cli
+        .timing
+        .unwrap_or_else(|| format!("{}.timing", cli.output));
 
     if cli.verbose {
-        println!("📹 Recording command: {} {}", cli.command, cli.args.join(" "));
+        println!(
+            "📹 Recording command: {} {}",
+            cli.command,
+            cli.args.join(" ")
+        );
         println!("📄 Output file: {}", cli.output);
         println!("⏱️  Timing file: {}", timing_file);
-        println!("📝 Format: {}", if cli.plain_text { "Plain text" } else { "Binary" });
+        println!(
+            "📝 Format: {}",
+            if cli.plain_text {
+                "Plain text"
+            } else {
+                "Binary"
+            }
+        );
         println!();
     }
 
@@ -74,7 +87,10 @@ fn main() -> Result<()> {
         println!("🎭 To replay, use:");
         println!("   player {} --timing {}", cli.output, timing_file);
     } else {
-        println!("✅ Recording saved to {} (timing: {})", cli.output, timing_file);
+        println!(
+            "✅ Recording saved to {} (timing: {})",
+            cli.output, timing_file
+        );
     }
 
     Ok(())

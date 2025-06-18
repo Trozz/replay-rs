@@ -33,14 +33,14 @@ fn test_record_command_not_found() {
     let timing_file = format!("{}.timing", output_file);
 
     let recorder = Recorder::new(&output_file, &timing_file).unwrap();
-    
+
     // Try to record a non-existent command
     let cmd = Command::new("this_command_definitely_does_not_exist_xyz123");
     let result = recorder.record_command(cmd, false);
-    
+
     // Should return an error
     assert!(result.is_err());
-    
+
     cleanup_files(&[&output_file, &timing_file]);
 }
 
@@ -60,7 +60,7 @@ fn test_record_with_readonly_output_file() -> Result<()> {
 
     // Try to create recorder with read-only file
     let result = Recorder::new(&output_file, &timing_file);
-    
+
     // Current implementation doesn't validate at creation time, so this may succeed
     // The error would occur later during actual recording
     let _ = result; // Don't assert on creation
@@ -80,16 +80,16 @@ fn test_record_process_killed() -> Result<()> {
     let timing_file = format!("{}.timing", output_file);
 
     let recorder = Recorder::new(&output_file, &timing_file)?;
-    
+
     // Record a command that we'll kill
     // Using 'sh -c' to ensure we can send signals properly
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
     cmd.arg("trap 'exit 1' TERM; sleep 10");
-    
+
     // This might succeed if the sleep completes quickly enough
     let result = recorder.record_command(cmd, false);
-    
+
     // Don't assert on failure since the timing is unpredictable
     let _ = result;
 
@@ -109,7 +109,7 @@ fn test_replay_missing_output_file() -> Result<()> {
 
     // Try to create player with missing output file
     let result = Player::new(&timing_file, &output_file);
-    
+
     // Should fail
     assert!(result.is_err());
 
@@ -128,7 +128,7 @@ fn test_replay_missing_timing_file() -> Result<()> {
 
     // Try to create player with missing timing file
     let result = Player::new(&timing_file, &output_file);
-    
+
     // Should fail
     assert!(result.is_err());
 
@@ -152,12 +152,12 @@ fn test_replay_corrupted_timing_file() -> Result<()> {
     writeln!(timing, "0.1 not_a_size")?;
     writeln!(timing, "missing_size")?;
     writeln!(timing, "-1.0 10")?; // Negative delay
-    writeln!(timing, "0.1 -5")?;   // Negative size
-    writeln!(timing, "")?;         // Empty line
+    writeln!(timing, "0.1 -5")?; // Negative size
+    writeln!(timing, "")?; // Empty line
     writeln!(timing, "0.1 999999999999999")?; // Huge size
 
     let player = Player::new(&timing_file, &output_file)?;
-    
+
     // Replay might fail or handle gracefully, but shouldn't panic
     let _ = player.replay(1.0);
     let _ = player.dump();
@@ -176,7 +176,7 @@ fn test_replay_empty_files() -> Result<()> {
     File::create(&timing_file)?;
 
     let player = Player::new(&timing_file, &output_file)?;
-    
+
     // Should handle empty files gracefully
     player.replay(1.0)?;
     player.dump()?;
@@ -193,16 +193,16 @@ fn test_record_disk_full_simulation() -> Result<()> {
     // Create files with very limited space
     // We can't easily simulate a full disk, but we can test with permission denial
     // during write by creating the file and then making the directory read-only
-    
+
     // This test is tricky to implement portably, so we'll test a related scenario
     // Create a file that we'll make unwritable after initial creation
     let recorder = Recorder::new(&output_file, &timing_file)?;
-    
+
     // Record should work initially
     let mut cmd = Command::new("echo");
     cmd.arg("test");
     let result = recorder.record_command(cmd, false);
-    
+
     // Should complete (we can't easily simulate disk full in a portable way)
     assert!(result.is_ok());
 
@@ -221,12 +221,12 @@ fn test_replay_partial_timing_data() -> Result<()> {
 
     // Create timing file with fewer entries than output
     let mut timing = File::create(&timing_file)?;
-    writeln!(timing, "0.1 7")?;  // "Line 1\n"
-    writeln!(timing, "0.2 7")?;  // "Line 2\n"
-    // Missing timing for the rest
+    writeln!(timing, "0.1 7")?; // "Line 1\n"
+    writeln!(timing, "0.2 7")?; // "Line 2\n"
+                                // Missing timing for the rest
 
     let player = Player::new(&timing_file, &output_file)?;
-    
+
     // Should handle partial data gracefully
     player.replay(5.0)?;
     player.dump()?;
@@ -246,11 +246,11 @@ fn test_replay_excessive_timing_data() -> Result<()> {
 
     // Create timing file requesting more data than available
     let mut timing = File::create(&timing_file)?;
-    writeln!(timing, "0.1 5")?;   // "Short" - OK
+    writeln!(timing, "0.1 5")?; // "Short" - OK
     writeln!(timing, "0.2 100")?; // Requesting 100 bytes when none left
 
     let player = Player::new(&timing_file, &output_file)?;
-    
+
     // Should handle gracefully without panic
     let result = player.replay(5.0);
     // Might succeed or fail, but shouldn't panic
@@ -268,23 +268,23 @@ fn test_record_failing_command_exit_codes() -> Result<()> {
     // Test various exit codes
     let test_cases = vec![
         ("exit 1", 1),
-        ("exit 2", 2), 
+        ("exit 2", 2),
         ("exit 127", 127), // Command not found
         ("exit 255", 255), // Max exit code
     ];
 
     for (cmd_str, _expected_code) in test_cases {
         let recorder = Recorder::new(&output_file, &timing_file)?;
-        
+
         let mut cmd = Command::new("sh");
         cmd.arg("-c");
         cmd.arg(cmd_str);
-        
+
         let result = recorder.record_command(cmd, false);
-        
+
         // Should fail for non-zero exit codes
         assert!(result.is_err());
-        
+
         // Clean up for next iteration
         cleanup_files(&[&output_file, &timing_file]);
     }
@@ -299,14 +299,14 @@ fn test_concurrent_access_to_files() -> Result<()> {
 
     // Create recorder
     let recorder = Recorder::new(&output_file, &timing_file)?;
-    
+
     // Try to open the files while recorder might have them open
     // This tests file locking/sharing behavior
     let result = OpenOptions::new()
         .write(true)
         .append(true)
         .open(&output_file);
-    
+
     // Behavior is platform-dependent, but should not crash
     let _ = result;
 
@@ -324,7 +324,7 @@ fn test_invalid_file_paths() {
     // Test with various invalid paths
     let invalid_paths = vec![
         ("", "empty.timing"),                    // Empty output path
-        ("output.log", ""),                      // Empty timing path  
+        ("output.log", ""),                      // Empty timing path
         ("/dev/null/impossible", "test.timing"), // Invalid directory
         ("test.log", "/dev/null/impossible"),    // Invalid directory
     ];
@@ -349,7 +349,7 @@ fn test_replay_with_negative_speed() -> Result<()> {
     recorder.record_command(cmd, false)?;
 
     let player = Player::new(&timing_file, &output_file)?;
-    
+
     // Try replay with invalid speeds
     // Test only valid speeds to avoid panics in Duration::from_secs_f64
     // Zero speed might work
@@ -370,13 +370,13 @@ fn test_record_with_broken_pipe() -> Result<()> {
     let timing_file = format!("{}.timing", output_file);
 
     let recorder = Recorder::new(&output_file, &timing_file)?;
-    
+
     // Command that might experience broken pipe
     // head -n 1 will close its input after reading one line
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
     cmd.arg("yes | head -n 1");
-    
+
     // Should handle broken pipe gracefully
     let result = recorder.record_command(cmd, false);
     assert!(result.is_ok());

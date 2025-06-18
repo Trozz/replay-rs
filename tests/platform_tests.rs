@@ -56,14 +56,14 @@ fn test_different_shells() -> Result<()> {
         let mut cmd = Command::new(shell);
         cmd.arg("-c");
         cmd.arg(test_cmd);
-        
+
         let result = recorder.record_command(cmd, false);
-        
+
         if result.is_ok() {
             // Verify output
             let output_content = fs::read_to_string(&output_file)?;
             assert!(output_content.contains(&format!("{} shell test", shell)));
-            
+
             // Test replay
             let player = Player::new(&timing_file, &output_file)?;
             player.replay(10.0)?;
@@ -89,7 +89,7 @@ fn test_bash_specific_features() -> Result<()> {
     let mut cmd = Command::new("bash");
     cmd.arg("-c");
     cmd.arg("echo \"Bash version: $BASH_VERSION\"; echo \"Array: ${BASH_VERSINFO[@]}\"");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify bash-specific variables were captured
@@ -114,7 +114,7 @@ fn test_terminal_environment_variables() -> Result<()> {
         cmd.env("TERM", term);
         cmd.arg("-c");
         cmd.arg("echo \"TERM=$TERM\"");
-        
+
         recorder.record_command(cmd, false)?;
 
         // Verify TERM was set correctly
@@ -146,9 +146,9 @@ fn test_locale_and_encoding() -> Result<()> {
         cmd.env("LC_ALL", locale);
         cmd.arg("-c");
         cmd.arg(&format!("echo '{}'", test_text));
-        
+
         let result = recorder.record_command(cmd, false);
-        
+
         if result.is_ok() {
             // Check if text was properly recorded
             let output_content = fs::read_to_string(&output_file)?;
@@ -169,16 +169,16 @@ fn test_color_output_handling() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Force color output using standard tools
     if cfg!(target_os = "macos") {
         cmd.arg("ls -G /tmp | head -5");
     } else {
         cmd.arg("ls --color=always /tmp | head -5");
     }
-    
+
     let result = recorder.record_command(cmd, false);
-    
+
     if result.is_ok() {
         // Should contain some ANSI escape sequences for colors
         let output_content = fs::read_to_string(&output_file)?;
@@ -200,7 +200,7 @@ fn test_macos_specific_features() -> Result<()> {
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
     cmd.arg("sw_vers; sysctl -n machdep.cpu.brand_string");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify macOS-specific commands worked
@@ -221,7 +221,7 @@ fn test_linux_specific_features() -> Result<()> {
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
     cmd.arg("uname -a; cat /proc/version");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify Linux-specific info was captured
@@ -242,7 +242,7 @@ fn test_windows_specific_features() -> Result<()> {
     let mut cmd = Command::new("cmd");
     cmd.arg("/C");
     cmd.arg("ver");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify Windows version info was captured
@@ -261,10 +261,10 @@ fn test_terminal_width_handling() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Create output that depends on terminal width
     cmd.arg("printf '%100s\\n' | tr ' ' '='; echo 'END'");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify output was captured
@@ -284,10 +284,12 @@ fn test_line_ending_variations() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Test different line endings
-    cmd.arg("printf 'LF line\\n'; printf 'CR line\\r'; printf 'CRLF line\\r\\n'; printf 'No newline'");
-    
+    cmd.arg(
+        "printf 'LF line\\n'; printf 'CR line\\r'; printf 'CRLF line\\r\\n'; printf 'No newline'",
+    );
+
     recorder.record_command(cmd, false)?;
 
     // Verify all content was captured
@@ -311,7 +313,7 @@ fn test_environment_preservation() -> Result<()> {
     cmd.env("ANOTHER_VAR", "another_value");
     cmd.arg("-c");
     cmd.arg("echo \"REPLAY_TEST_VAR=$REPLAY_TEST_VAR\"; echo \"ANOTHER_VAR=$ANOTHER_VAR\"");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify environment variables were available to the command
@@ -331,11 +333,11 @@ fn test_path_separators() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Use appropriate path separator for the platform
     let path_sep = if cfg!(windows) { "\\" } else { "/" };
     cmd.arg(&format!("echo 'Path separator: {}'", path_sep));
-    
+
     recorder.record_command(cmd, false)?;
 
     let output_content = fs::read_to_string(&output_file)?;
@@ -353,10 +355,10 @@ fn test_signal_handling() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Set up signal handling
     cmd.arg("trap 'echo SIGINT received' INT; echo 'Ready'; sleep 0.1; echo 'Done'");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify normal completion
@@ -375,13 +377,13 @@ fn test_working_directory() -> Result<()> {
 
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
-    
+
     // Set specific working directory
     let temp_dir = env::temp_dir();
     cmd.current_dir(&temp_dir);
     cmd.arg("-c");
     cmd.arg("pwd");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify working directory was set

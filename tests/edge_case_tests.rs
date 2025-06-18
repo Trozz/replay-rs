@@ -71,9 +71,11 @@ fn test_record_binary_output() -> Result<()> {
     // Output should contain binary data
     let output_data = fs::read(&output_file)?;
     assert!(!output_data.is_empty());
-    
+
     // Binary data should have non-printable characters
-    let has_binary = output_data.iter().any(|&b| b < 32 && b != b'\n' && b != b'\r' && b != b'\t');
+    let has_binary = output_data
+        .iter()
+        .any(|&b| b < 32 && b != b'\n' && b != b'\r' && b != b'\t');
     assert!(has_binary || output_data.len() > 0); // Some systems might filter the binary
 
     // Should still be replayable
@@ -158,11 +160,13 @@ fn test_record_unicode_and_emoji() -> Result<()> {
     // Check for at least some unicode content (exact preservation depends on terminal)
     assert!(!output_content.is_empty());
     // The content should contain some of our text
-    assert!(output_content.contains("Recording test") || 
-            output_content.contains("Chinese:") || 
-            output_content.contains("Arabic:") ||
-            output_content.contains("Russian:") ||
-            output_content.contains("Special:"));
+    assert!(
+        output_content.contains("Recording test")
+            || output_content.contains("Chinese:")
+            || output_content.contains("Arabic:")
+            || output_content.contains("Russian:")
+            || output_content.contains("Special:")
+    );
 
     // Should be replayable
     let player = Player::new(&timing_file, &output_file)?;
@@ -315,7 +319,7 @@ fn test_record_terminal_resize_sequences() -> Result<()> {
     let mut cmd = Command::new("printf");
     // Various terminal control sequences
     cmd.arg("\x1b[2J"); // Clear screen
-    cmd.arg("\x1b[H");  // Home cursor
+    cmd.arg("\x1b[H"); // Home cursor
     cmd.arg("Terminal Control Test\\n");
     cmd.arg("\x1b[5;10H"); // Position cursor
     cmd.arg("Positioned Text\\n");

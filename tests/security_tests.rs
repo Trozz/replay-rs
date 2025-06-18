@@ -43,11 +43,11 @@ fn test_path_traversal_prevention() {
         // Try to use dangerous paths for output files
         let timing_file = test_file_name("safe_timing.log");
         let result = Recorder::new(path, &timing_file);
-        
+
         // Should either fail or create file in safe location
         // Current implementation is permissive, so just verify it doesn't crash
         let _ = result;
-        
+
         cleanup_files(&[&timing_file]);
     }
 }
@@ -95,8 +95,16 @@ fn test_file_permission_security() -> Result<()> {
     let timing_perms = fs::metadata(&timing_file)?.permissions();
 
     // Files should not be world-writable
-    assert_eq!(output_perms.mode() & 0o002, 0, "Output file is world-writable");
-    assert_eq!(timing_perms.mode() & 0o002, 0, "Timing file is world-writable");
+    assert_eq!(
+        output_perms.mode() & 0o002,
+        0,
+        "Output file is world-writable"
+    );
+    assert_eq!(
+        timing_perms.mode() & 0o002,
+        0,
+        "Timing file is world-writable"
+    );
 
     // Files should not be executable
     assert_eq!(output_perms.mode() & 0o111, 0, "Output file is executable");
@@ -125,17 +133,17 @@ fn test_command_injection_prevention() -> Result<()> {
         let recorder = Recorder::new(&output_file, &timing_file)?;
         let mut cmd = Command::new("echo");
         cmd.arg(arg);
-        
+
         // Should safely handle the argument without executing injected commands
         let result = recorder.record_command(cmd, false);
-        
+
         if result.is_ok() {
             // Verify the dangerous string was treated as literal text
             let output_content = fs::read_to_string(&output_file)?;
             // Should contain the literal string, not the result of execution
             assert!(!output_content.contains("root:") && !output_content.contains("/bin/bash"));
         }
-        
+
         cleanup_files(&[&output_file, &timing_file]);
     }
 
@@ -150,7 +158,7 @@ fn test_symlink_security() -> Result<()> {
 
     // Create a file and a symlink to it
     File::create(&target_file)?;
-    
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
@@ -159,7 +167,7 @@ fn test_symlink_security() -> Result<()> {
 
     // Try to use the symlink
     let result = Recorder::new(&output_file, &timing_file);
-    
+
     // Should either follow the symlink safely or reject it
     if result.is_ok() {
         // If it worked, verify behavior is safe
@@ -187,7 +195,7 @@ fn test_resource_exhaustion_protection() -> Result<()> {
     // Player should handle this safely without exhausting memory
     let player = Player::new(&timing_file, &output_file)?;
     let result = player.replay(1.0);
-    
+
     // Should either handle gracefully or error, but not panic or exhaust resources
     let _ = result;
 
@@ -202,14 +210,14 @@ fn test_escape_sequence_injection() -> Result<()> {
 
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("printf");
-    
+
     // Try to inject escape sequences that might affect terminal state
-    cmd.arg("\x1b[3J");  // Clear scrollback
+    cmd.arg("\x1b[3J"); // Clear scrollback
     cmd.arg("\x1b[?25l"); // Hide cursor
     cmd.arg("\x1b[?47h"); // Switch to alternate screen
-    cmd.arg("\x1b[2J");   // Clear screen
+    cmd.arg("\x1b[2J"); // Clear screen
     cmd.arg("\x1b[?1000h"); // Enable mouse tracking
-    
+
     recorder.record_command(cmd, false)?;
 
     // These sequences should be recorded but handled safely during replay
@@ -227,15 +235,15 @@ fn test_unicode_security_issues() -> Result<()> {
 
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("printf");
-    
+
     // Test various Unicode security issues
     // Right-to-left override
     cmd.arg("Normal text \u{202E}txet desrever\u{202C} back to normal\n");
     // Homograph attacks
     cmd.arg("google.com vs gооgle.com\n"); // Second one has Cyrillic 'o's
-    // Zero-width characters
+                                           // Zero-width characters
     cmd.arg("Invis\u{200B}ible\u{200C}break\n");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Should handle these safely
@@ -257,7 +265,7 @@ fn test_environment_variable_leakage() -> Result<()> {
     cmd.env("SECRET_TOKEN", "super_secret_value_12345");
     cmd.arg("-c");
     cmd.arg("echo 'Running command...'"); // Don't echo the secret
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify secret is not leaked in output
@@ -272,29 +280,29 @@ fn test_environment_variable_leakage() -> Result<()> {
 fn test_filename_sanitization() {
     // Test that dangerous filenames are handled safely
     let dangerous_names = vec![
-        "file\0name.log",  // Null byte
-        "file\nname.log",  // Newline
-        "file\rname.log",  // Carriage return
-        "..",              // Parent directory
-        ".",               // Current directory
-        "",                // Empty
-        "con",             // Windows reserved
-        "prn",             // Windows reserved
-        "aux",             // Windows reserved
+        "file\0name.log", // Null byte
+        "file\nname.log", // Newline
+        "file\rname.log", // Carriage return
+        "..",             // Parent directory
+        ".",              // Current directory
+        "",               // Empty
+        "con",            // Windows reserved
+        "prn",            // Windows reserved
+        "aux",            // Windows reserved
     ];
 
     for name in dangerous_names {
         let timing_name = format!("{}.timing", name);
         let result = Recorder::new(name, &timing_name);
-        
+
         // Should either sanitize the name or reject it
         if result.is_err() {
             // Good, rejected dangerous name
             continue;
         }
-        
+
         // If accepted, verify it was sanitized
-        // We can't easily check the actual filename used without 
+        // We can't easily check the actual filename used without
         // inspecting internal state, but the creation should be safe
     }
 }
@@ -306,7 +314,7 @@ fn test_shell_metacharacter_safety() -> Result<()> {
 
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("echo");
-    
+
     // Various shell metacharacters that should be treated literally
     cmd.arg("$HOME");
     cmd.arg("$(whoami)");
@@ -314,7 +322,7 @@ fn test_shell_metacharacter_safety() -> Result<()> {
     cmd.arg("*");
     cmd.arg("?");
     cmd.arg("[a-z]");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify metacharacters were not expanded
@@ -337,7 +345,7 @@ fn test_replay_isolation() -> Result<()> {
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
     cmd.arg("echo 'MARKER_START'; touch /tmp/replay_test_file_12345; echo 'MARKER_END'");
-    
+
     recorder.record_command(cmd, false)?;
 
     // The recording might create the file
@@ -351,8 +359,10 @@ fn test_replay_isolation() -> Result<()> {
     player.replay(5.0)?;
 
     // Verify replay didn't execute the command
-    assert!(!Path::new("/tmp/replay_test_file_12345").exists(), 
-        "Replay should not execute recorded commands!");
+    assert!(
+        !Path::new("/tmp/replay_test_file_12345").exists(),
+        "Replay should not execute recorded commands!"
+    );
 
     cleanup_files(&[&output_file, &timing_file]);
     Ok(())

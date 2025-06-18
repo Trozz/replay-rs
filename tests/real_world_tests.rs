@@ -48,7 +48,7 @@ fn test_record_git_operations() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("git");
     cmd.args(&["--version"]);
-    
+
     recorder.record_command(cmd, false)?;
 
     // Verify git output was captured
@@ -76,11 +76,14 @@ fn test_record_cargo_build_output() -> Result<()> {
     // Create a minimal Rust project
     let temp_dir = test_file_name("cargo_test_project");
     fs::create_dir(&temp_dir)?;
-    
+
     let cargo_toml = format!("{}/Cargo.toml", temp_dir);
     let mut file = File::create(&cargo_toml)?;
-    writeln!(file, "[package]\nname = \"test\"\nversion = \"0.1.0\"\nedition = \"2021\"")?;
-    
+    writeln!(
+        file,
+        "[package]\nname = \"test\"\nversion = \"0.1.0\"\nedition = \"2021\""
+    )?;
+
     let src_dir = format!("{}/src", temp_dir);
     fs::create_dir(&src_dir)?;
     let main_rs = format!("{}/main.rs", src_dir);
@@ -91,9 +94,9 @@ fn test_record_cargo_build_output() -> Result<()> {
     let mut cmd = Command::new("cargo");
     cmd.current_dir(&temp_dir);
     cmd.args(&["check", "--color=always"]);
-    
+
     let _result = recorder.record_command(cmd, false);
-    
+
     // Clean up temp project
     fs::remove_dir_all(&temp_dir)?;
 
@@ -114,24 +117,26 @@ fn test_record_colored_output() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Generate colored output using ANSI escape codes
-    cmd.arg("
+    cmd.arg(
+        "
         echo '\x1b[31mRed text\x1b[0m';
         echo '\x1b[32mGreen text\x1b[0m';
         echo '\x1b[33mYellow text\x1b[0m';
         echo '\x1b[34mBlue text\x1b[0m';
         echo '\x1b[1mBold text\x1b[0m';
         echo '\x1b[4mUnderlined text\x1b[0m';
-    ");
-    
+    ",
+    );
+
     recorder.record_command(cmd, false)?;
 
     // Verify colors were preserved
     let output_content = fs::read_to_string(&output_file)?;
     assert!(output_content.contains("\x1b[31m")); // Red
     assert!(output_content.contains("\x1b[32m")); // Green
-    assert!(output_content.contains("\x1b[1m"));  // Bold
+    assert!(output_content.contains("\x1b[1m")); // Bold
 
     cleanup_files(&[&output_file, &timing_file]);
     Ok(())
@@ -145,16 +150,18 @@ fn test_record_progress_bar() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Simulate a progress bar
-    cmd.arg("
+    cmd.arg(
+        "
         for i in $(seq 0 10 100); do
             printf '\\rProgress: [%-10s] %d%%' \"$(printf '#%.0s' $(seq 1 $((i/10))))\" \"$i\";
             sleep 0.1;
         done;
         echo;
-    ");
-    
+    ",
+    );
+
     recorder.record_command(cmd, false)?;
 
     // Should contain progress updates
@@ -179,13 +186,20 @@ fn test_record_interactive_python() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Run Python with some simple commands
-    let python_cmd = if command_exists("python3") { "python3" } else { "python" };
-    cmd.arg(&format!("echo 'print(\"Hello from Python\")
+    let python_cmd = if command_exists("python3") {
+        "python3"
+    } else {
+        "python"
+    };
+    cmd.arg(&format!(
+        "echo 'print(\"Hello from Python\")
 print(2 + 2)
-exit()' | {}", python_cmd));
-    
+exit()' | {}",
+        python_cmd
+    ));
+
     recorder.record_command(cmd, false)?;
 
     // Should contain Python output
@@ -211,9 +225,9 @@ fn test_record_curl_download() -> Result<()> {
     let mut cmd = Command::new("curl");
     // Use a small, reliable URL
     cmd.args(&["-I", "https://example.com"]);
-    
+
     let result = recorder.record_command(cmd, false);
-    
+
     if result.is_ok() {
         // Should contain HTTP headers
         let output_content = fs::read_to_string(&output_file)?;
@@ -232,15 +246,18 @@ fn test_record_make_output() -> Result<()> {
     // Create a simple Makefile
     let makefile = test_file_name("Makefile");
     let mut file = File::create(&makefile)?;
-    writeln!(file, "all:\n\t@echo \"Building target...\"\n\t@echo \"Compilation complete!\"")?;
+    writeln!(
+        file,
+        "all:\n\t@echo \"Building target...\"\n\t@echo \"Compilation complete!\""
+    )?;
 
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("make");
     cmd.arg("-f");
     cmd.arg(&makefile);
-    
+
     let result = recorder.record_command(cmd, false);
-    
+
     if result.is_ok() {
         // Should contain make output
         let output_content = fs::read_to_string(&output_file)?;
@@ -265,7 +282,7 @@ fn test_record_npm_output() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("npm");
     cmd.args(&["--version"]);
-    
+
     recorder.record_command(cmd, false)?;
 
     // Should contain npm version
@@ -289,7 +306,7 @@ fn test_record_docker_output() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("docker");
     cmd.args(&["--version"]);
-    
+
     recorder.record_command(cmd, false)?;
 
     // Should contain docker version
@@ -308,14 +325,14 @@ fn test_record_system_monitoring() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Simulate system monitoring output
     if cfg!(target_os = "macos") {
         cmd.arg("vm_stat | head -5");
     } else {
         cmd.arg("free -h 2>/dev/null || vmstat 2>/dev/null || echo 'No memory stats available'");
     }
-    
+
     recorder.record_command(cmd, false)?;
 
     // Should contain some output
@@ -334,9 +351,10 @@ fn test_record_database_query_output() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Simulate database query output
-    cmd.arg("
+    cmd.arg(
+        "
         echo 'Connected to database...';
         echo '+----+----------+--------+';
         echo '| id | name     | status |';
@@ -346,8 +364,9 @@ fn test_record_database_query_output() -> Result<()> {
         echo '| 3  | Charlie  | inactive|';
         echo '+----+----------+--------+';
         echo '3 rows in set (0.02 sec)';
-    ");
-    
+    ",
+    );
+
     recorder.record_command(cmd, false)?;
 
     // Should contain table output
@@ -374,7 +393,7 @@ fn test_record_log_tailing() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("tail");
     cmd.args(&["-5", &temp_log]);
-    
+
     recorder.record_command(cmd, false)?;
 
     // Should contain last 5 entries
@@ -395,9 +414,10 @@ fn test_record_test_runner_output() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Simulate test runner output
-    cmd.arg("
+    cmd.arg(
+        "
         echo 'Running test suite...';
         echo '';
         echo '\x1b[32m✓\x1b[0m test_addition';
@@ -407,8 +427,9 @@ fn test_record_test_runner_output() -> Result<()> {
         echo '';
         echo 'Tests: 2 passed, 1 failed, 3 total';
         echo 'Time: 0.123s';
-    ");
-    
+    ",
+    );
+
     recorder.record_command(cmd, false)?;
 
     // Should contain test results
@@ -428,9 +449,10 @@ fn test_record_repl_session() -> Result<()> {
     let recorder = Recorder::new(&output_file, &timing_file)?;
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    
+
     // Simulate a REPL session
-    cmd.arg("
+    cmd.arg(
+        "
         echo '> let x = 42';
         echo '42';
         echo '> x * 2';  
@@ -439,8 +461,9 @@ fn test_record_repl_session() -> Result<()> {
         echo 'Hello, World!';
         echo 'undefined';
         echo '> exit';
-    ");
-    
+    ",
+    );
+
     recorder.record_command(cmd, false)?;
 
     // Should contain REPL interaction

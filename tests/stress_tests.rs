@@ -37,7 +37,7 @@ fn test_large_output_volume() -> Result<()> {
     cmd.arg("-c");
     // Generate 10,000 lines of output
     cmd.arg("seq 1 10000");
-    
+
     let start = Instant::now();
     recorder.record_command(cmd, false)?;
     let record_duration = start.elapsed();
@@ -46,7 +46,7 @@ fn test_large_output_volume() -> Result<()> {
     let output_content = fs::read_to_string(&output_file)?;
     assert!(output_content.contains("1"));
     assert!(output_content.contains("10000"));
-    
+
     // Count lines (approximately)
     let line_count = output_content.lines().count();
     assert!(line_count >= 10000);
@@ -57,7 +57,10 @@ fn test_large_output_volume() -> Result<()> {
     player.replay(100.0)?; // Very fast replay
     let replay_duration = start.elapsed();
 
-    println!("Large output test - Record: {:?}, Replay: {:?}", record_duration, replay_duration);
+    println!(
+        "Large output test - Record: {:?}, Replay: {:?}",
+        record_duration, replay_duration
+    );
 
     cleanup_files(&[&output_file, &timing_file]);
     Ok(())
@@ -73,11 +76,11 @@ fn test_very_long_session_duration() -> Result<()> {
     cmd.arg("-c");
     // Generate output over 5 seconds
     cmd.arg("for i in 1 2 3 4 5; do echo \"Update $i\"; sleep 1; done");
-    
+
     let start = Instant::now();
     recorder.record_command(cmd, false)?;
     let duration = start.elapsed();
-    
+
     // Should take at least 5 seconds
     assert!(duration >= Duration::from_secs(4)); // Allow some margin
 
@@ -91,13 +94,13 @@ fn test_very_long_session_duration() -> Result<()> {
                 .and_then(|s| s.parse::<f64>().ok())
         })
         .sum();
-    
+
     // Total delays should be close to actual duration
     assert!(total_delay >= 4.0);
 
     // Test replay at different speeds
     let player = Player::new(&timing_file, &output_file)?;
-    
+
     // Ultra-fast replay
     let start = Instant::now();
     player.replay(1000.0)?;
@@ -118,7 +121,7 @@ fn test_high_frequency_updates() -> Result<()> {
     cmd.arg("-c");
     // Generate 1000 updates as fast as possible
     cmd.arg("for i in $(seq 1 1000); do printf '\\r%04d' $i; done; echo");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Timing file should have entries
@@ -146,7 +149,7 @@ fn test_memory_usage_large_files() -> Result<()> {
     cmd.arg("-c");
     // Generate ~1MB of data (1000 lines of 1000 'A's each)
     cmd.arg("for i in $(seq 1 1000); do printf '%1000s\\n' | tr ' ' 'A'; done");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Check file size
@@ -158,7 +161,7 @@ fn test_memory_usage_large_files() -> Result<()> {
     let start = Instant::now();
     player.replay(100.0)?;
     let duration = start.elapsed();
-    
+
     // Should complete reasonably quickly even with large file
     assert!(duration < Duration::from_secs(5));
 
@@ -181,8 +184,11 @@ fn test_concurrent_recording_sessions() -> Result<()> {
             let recorder = Recorder::new(&output_file, &timing_file)?;
             let mut cmd = Command::new("sh");
             cmd.arg("-c");
-            cmd.arg(&format!("echo 'Session {}'; for j in 1 2 3; do echo \"Line $j\"; done", i));
-            
+            cmd.arg(&format!(
+                "echo 'Session {}'; for j in 1 2 3; do echo \"Line $j\"; done",
+                i
+            ));
+
             let start = Instant::now();
             recorder.record_command(cmd, false)?;
             let duration = start.elapsed();
@@ -222,7 +228,7 @@ fn test_replay_speed_limits() -> Result<()> {
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
     cmd.arg("echo 'Start'; sleep 1; echo 'End'");
-    
+
     recorder.record_command(cmd, false)?;
 
     let player = Player::new(&timing_file, &output_file)?;
@@ -242,9 +248,9 @@ fn test_replay_speed_limits() -> Result<()> {
         let start = Instant::now();
         player.replay(speed)?;
         let duration = start.elapsed();
-        
+
         println!("Replay at {} ({}): {:?}", speed, description, duration);
-        
+
         // At very high speeds, should complete almost instantly
         if speed >= 100.0 {
             assert!(duration < Duration::from_millis(100));
@@ -265,7 +271,7 @@ fn test_continuous_output_stream() -> Result<()> {
     cmd.arg("-c");
     // Simulate continuous output stream
     cmd.arg("for i in $(seq 1 100); do printf '%s' \"$i \"; done; echo");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Should handle continuous output without newlines
@@ -286,12 +292,14 @@ fn test_burst_output_pattern() -> Result<()> {
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
     // Create burst pattern: lots of output, pause, lots of output
-    cmd.arg("
+    cmd.arg(
+        "
         for i in $(seq 1 50); do echo \"Burst 1 line $i\"; done;
         sleep 1;
         for i in $(seq 1 50); do echo \"Burst 2 line $i\"; done;
-    ");
-    
+    ",
+    );
+
     recorder.record_command(cmd, false)?;
 
     // Verify both bursts were captured
@@ -309,7 +317,7 @@ fn test_burst_output_pattern() -> Result<()> {
                 .and_then(|s| s.parse::<f64>().ok())
         })
         .fold(0.0f64, |max, delay| max.max(delay));
-    
+
     // Should have at least one significant delay
     assert!(max_delay >= 0.5);
 
@@ -327,7 +335,7 @@ fn test_many_small_writes() -> Result<()> {
     cmd.arg("-c");
     // Many small writes (one character at a time)
     cmd.arg("for i in $(seq 1 100); do printf '%s' 'X'; done; echo");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Should capture all characters
@@ -347,7 +355,7 @@ fn test_resource_cleanup() -> Result<()> {
     for i in 0..20 {
         let output_file = test_file_name(&format!("cleanup_{}.log", i));
         let timing_file = format!("{}.timing", output_file);
-        
+
         files_to_cleanup.push(output_file.clone());
         files_to_cleanup.push(timing_file.clone());
 
@@ -361,7 +369,7 @@ fn test_resource_cleanup() -> Result<()> {
         let player = Player::new(&timing_file, &output_file)?;
         player.replay(10.0)?;
         player.dump()?;
-        
+
         // Resources should be released after drop
     }
 
@@ -386,7 +394,7 @@ fn test_extreme_timing_precision() -> Result<()> {
     cmd.arg("-c");
     // Generate output with very small delays
     cmd.arg("for i in 1 2 3 4 5; do echo $i; sleep 0.001; done");
-    
+
     recorder.record_command(cmd, false)?;
 
     // Check timing precision
@@ -402,7 +410,7 @@ fn test_extreme_timing_precision() -> Result<()> {
 
     // Should have captured timing with reasonable precision
     assert!(!delays.is_empty());
-    
+
     // At least some delays should be non-zero
     let non_zero_delays = delays.iter().filter(|&&d| d > 0.0).count();
     assert!(non_zero_delays > 0);
