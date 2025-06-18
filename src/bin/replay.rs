@@ -21,9 +21,9 @@ struct Cli {
 enum Commands {
     /// Record a command execution with timing data
     Record {
-        /// Command to execute and record
+        /// Command to execute and record (defaults to current shell)
         #[arg(value_name = "COMMAND")]
-        command: String,
+        command: Option<String>,
 
         /// Arguments for the command
         #[arg(value_name = "ARGS")]
@@ -47,8 +47,8 @@ enum Commands {
     },
     /// Replay a recorded session with timing data
     Play {
-        /// Session file to replay
-        #[arg(value_name = "SESSION_FILE")]
+        /// Session file to replay (defaults to session.log)
+        #[arg(value_name = "SESSION_FILE", default_value = "session.log")]
         session_file: String,
 
         /// Timing file for replay data
@@ -69,6 +69,19 @@ enum Commands {
     },
 }
 
+/// Get the default shell for the current platform
+fn get_default_shell() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("ComSpec").unwrap_or_else(|_| "powershell".to_string())
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -81,6 +94,9 @@ fn main() -> Result<()> {
             plain_text,
             verbose,
         } => {
+            // Determine command - use default shell if none specified
+            let command = command.unwrap_or_else(get_default_shell);
+            
             // Determine timing file name
             let timing_file = timing.unwrap_or_else(|| format!("{}.timing", output));
 

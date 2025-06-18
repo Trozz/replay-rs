@@ -668,4 +668,251 @@ mod tests {
         fs::remove_file(typescript_file).unwrap_or(());
         Ok(())
     }
+
+    #[test]
+    fn test_recorder_file_creation_errors() {
+        use std::os::unix::fs::PermissionsExt;
+        
+        // Create a directory where we can't write
+        let test_dir = "test_no_write_dir";
+        fs::create_dir_all(test_dir).unwrap_or(());
+        
+        // Make directory read-only
+        let metadata = fs::metadata(test_dir).unwrap();
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(0o555); // r-xr-xr-x
+        fs::set_permissions(test_dir, permissions).unwrap_or(());
+        
+        let recorder = Recorder::new(
+            &format!("{}/output.log", test_dir),
+            &format!("{}/timing.log", test_dir)
+        ).unwrap();
+        
+        let mut cmd = Command::new("echo");
+        cmd.arg("test");
+        let result = recorder.record_command(cmd, false);
+        
+        // Should fail due to permission issues
+        assert!(result.is_err());
+        
+        // Restore permissions and clean up
+        let mut permissions = fs::metadata(test_dir).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(test_dir, permissions).unwrap_or(());
+        fs::remove_dir_all(test_dir).unwrap_or(());
+    }
+
+    #[test]
+    fn test_player_replay_with_malformed_timing_lines() -> Result<()> {
+        let timing_file = "test_malformed.timing";
+        let typescript_file = "test_malformed.out";
+
+        // Create timing file with various malformed lines
+        let mut timing = File::create(timing_file)?;
+        writeln!(timing, "")?; // Empty line (should be skipped)
+        writeln!(timing, "0.1")?; // Missing size (should be skipped)
+        writeln!(timing, "0.1 5")?; // Valid line
+        writeln!(timing, "   ")?; // Whitespace only (should be skipped)
+
+        // Create typescript file
+        let mut typescript = File::create(typescript_file)?;
+        write!(typescript, "Hello")?;
+
+        let player = Player::new(timing_file, typescript_file)?;
+        
+        // Should handle malformed lines gracefully
+        player.replay(1.0)?;
+
+        // Clean up
+        fs::remove_file(timing_file).unwrap_or(());
+        fs::remove_file(typescript_file).unwrap_or(());
+        Ok(())
+    }
+
+    #[test]
+    fn test_player_replay_read_error() -> Result<()> {
+        let timing_file = "test_read_error.timing";
+        let typescript_file = "test_read_error.out";
+
+        // Create timing file
+        let mut timing = File::create(timing_file)?;
+        writeln!(timing, "0.1 10")?; // Expects 10 bytes
+        writeln!(timing, "0.1 5")?;  // Expects 5 more bytes
+
+        // Create typescript file with less data than expected
+        let mut typescript = File::create(typescript_file)?;
+        write!(typescript, "Short")?; // Only 5 bytes
+
+        let player = Player::new(timing_file, typescript_file)?;
+        
+        // Should handle EOF gracefully
+        let result = player.replay(1.0);
+        assert!(result.is_ok()); // Should succeed by breaking on EOF
+
+        // Clean up
+        fs::remove_file(timing_file).unwrap_or(());
+        fs::remove_file(typescript_file).unwrap_or(());
+        Ok(())
+    }
+
+    #[test]
+    fn test_clean_for_display_edge_cases_2() {
+        // Test ESC at end of string
+        let input = "Text\x1b";
+        let result = clean_for_display(input);
+        assert_eq!(result, "Text\x1b");
+
+        // Test incomplete ESC sequence
+        let input = "Text\x1b[";
+        let result = clean_for_display(input);
+        assert_eq!(result, "Text\x1b[");
+
+        // Test ? character not followed by 2004
+        let input = "Question? Mark";
+        let result = clean_for_display(input);
+        assert_eq!(result, "Question? Mark");
+
+        // Test ? at end of string
+        let input = "End?";
+        let result = clean_for_display(input);
+        assert_eq!(result, "End?");
+
+        // Test ?2004 without h or l
+        let input = "Test?2004x";
+        let result = clean_for_display(input);
+        assert_eq!(result, "Test?2004x");
+    }
+
+    #[test]
+    fn test_recorder_stdout_read_error() {
+        // This test simulates a command that closes stdout immediately
+        let recorder = Recorder::new("test_stdout_error.log", "test_stdout_error.timing").unwrap();
+        
+        // Use a command that exits immediately
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("exec 1>&-; exit 0"); // Close stdout and exit
+        
+        // Should handle the closed stdout gracefully
+        let result = recorder.record_command(cmd, false);
+        
+        // The command technically succeeds (exit 0) even though stdout is closed
+        assert!(result.is_ok());
+        
+        // Clean up
+        fs::remove_file("test_stdout_error.log").unwrap_or(());
+        fs::remove_file("test_stdout_error.timing").unwrap_or(());
+    }
+
+    #[test]
+    fn test_recorder_create_timing_file_error() {
+        // Create output file first
+        let output_file = "test_timing_error.log";
+        File::create(output_file).unwrap();
+        
+        // Create a directory with same name as timing file
+        let timing_dir = "test_timing_error.timing";
+        fs::create_dir_all(timing_dir).unwrap_or(());
+        
+        let recorder = Recorder::new(output_file, timing_dir).unwrap();
+        
+        let mut cmd = Command::new("echo");
+        cmd.arg("test");
+        let result = recorder.record_command(cmd, false);
+        
+        // Should fail because timing_dir is a directory, not a file
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Failed to create timing file"));
+        
+        // Clean up
+        fs::remove_file(output_file).unwrap_or(());
+        fs::remove_dir_all(timing_dir).unwrap_or(());
+    }
+
+    #[test]
+    fn test_player_file_open_error() {
+        // Create timing file with actual timing data
+        let timing_file = "test_player_open_error.timing";
+        let typescript_file = "test_player_open_error.out";
+        
+        // Create timing file and typescript file first
+        let mut timing = File::create(timing_file).unwrap();
+        writeln!(timing, "0.1 5").unwrap();
+        drop(timing);
+        
+        // Create typescript file
+        let mut typescript = File::create(typescript_file).unwrap();
+        write!(typescript, "Hello").unwrap();
+        drop(typescript);
+        
+        // Create player successfully
+        let player = Player::new(timing_file, typescript_file).unwrap();
+        
+        // Now delete the typescript file to trigger an error during replay
+        fs::remove_file(typescript_file).unwrap();
+        
+        let result = player.replay(1.0);
+        
+        // This should fail because typescript file was deleted
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Failed to open typescript file"));
+        
+        // Clean up
+        fs::remove_file(timing_file).unwrap_or(());
+    }
+
+    #[test]
+    fn test_player_replay_unexpected_error() -> Result<()> {
+        let timing_file = "test_unexpected_error.timing";
+        let typescript_file = "test_unexpected_error.out";
+
+        // Create timing file
+        let mut timing = File::create(timing_file)?;
+        writeln!(timing, "0.1 5")?;
+        writeln!(timing, "0.1 10")?; // Request more bytes than available
+
+        // Create typescript file with limited data
+        let mut typescript = File::create(typescript_file)?;
+        write!(typescript, "Hello")?; // Only 5 bytes
+
+        let player = Player::new(timing_file, typescript_file)?;
+        
+        // This should handle the EOF and continue
+        let result = player.replay(1.0);
+        assert!(result.is_ok());
+
+        // Clean up
+        fs::remove_file(timing_file).unwrap_or(());
+        fs::remove_file(typescript_file).unwrap_or(());
+        Ok(())
+    }
+
+    #[test]
+    fn test_recorder_stdout_read_io_error() {
+        // Try to force an I/O error during stdout reading
+        let recorder = Recorder::new("test_io_error.log", "test_io_error.timing").unwrap();
+        
+        // Create a command that produces output then errors
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("echo 'test'; sleep 0.1; kill -9 $$");
+        
+        // This might fail or succeed depending on timing
+        let _ = recorder.record_command(cmd, false);
+        
+        // Clean up
+        fs::remove_file("test_io_error.log").unwrap_or(());
+        fs::remove_file("test_io_error.timing").unwrap_or(());
+    }
+
+    #[test]
+    fn test_clean_for_display_question_mark_edge() {
+        // Test ? at position where it could be ?2004 but isn't complete
+        let input = "Test?200";
+        let result = clean_for_display(input);
+        assert_eq!(result, "Test?200");
+        
+        // Test ? near end without enough chars
+        let input = "Test?20";
+        let result = clean_for_display(input);
+        assert_eq!(result, "Test?20");
+    }
 }

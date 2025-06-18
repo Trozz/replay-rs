@@ -431,21 +431,28 @@ fn test_replay_play_with_verbose() {
 
 #[test]
 fn test_invalid_command_arguments() {
-    // Test recorder with missing command
+    // Test recorder without command now defaults to shell - it should succeed
+    // but fail because it tries to start an interactive shell in a non-interactive environment
     let output = Command::new(binary_path("recorder"))
         .output()
         .expect("Failed to execute recorder");
 
-    assert!(!output.status.success());
+    // This may succeed or fail depending on shell behavior, but shouldn't crash
+    let _ = output.status.success();
 
-    // Test player with missing session file
+    // Test player without session file now defaults to session.log
+    // Clean up any leftover session files first
+    std::fs::remove_file("session.log").unwrap_or(());
+    std::fs::remove_file("session.log.timing").unwrap_or(());
+    
     let output = Command::new(binary_path("player"))
         .output()
         .expect("Failed to execute player");
 
+    // Should fail because default session.log.timing doesn't exist
     assert!(!output.status.success());
 
-    // Test replay with no subcommand
+    // Test replay with no subcommand - this should still fail
     let output = Command::new(binary_path("replay"))
         .output()
         .expect("Failed to execute replay");
@@ -542,4 +549,566 @@ fn test_complex_command_with_pipes_and_redirects() {
     }
 
     cleanup_files(&[&output_file, &format!("{}.timing", output_file)]);
+}
+
+#[test]
+fn test_player_dump_mode_with_verbose() {
+    let output_file = test_file_name("binary_player_dump_verbose.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // First record a session
+    let _record_output = Command::new(binary_path("recorder"))
+        .args(&[
+            "echo",
+            "Dump mode verbose test",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+        ])
+        .output()
+        .expect("Failed to execute recorder");
+
+    // Play back in dump mode with verbose
+    let play_output = Command::new(binary_path("player"))
+        .args(&[&output_file, "--dump", "--verbose"])
+        .output()
+        .expect("Failed to execute player");
+
+    assert!(play_output.status.success());
+    let stdout = String::from_utf8_lossy(&play_output.stdout);
+    
+    // Check verbose output for dump mode
+    assert!(stdout.contains("Session file"));
+    assert!(stdout.contains("Timing file"));
+    assert!(stdout.contains("Mode: Fast dump"));
+    assert!(stdout.contains("Fast dumping session content"));
+    assert!(stdout.contains("Playback completed"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_player_timed_mode_verbose() {
+    let output_file = test_file_name("binary_player_timed_verbose.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // First record a session
+    let _record_output = Command::new(binary_path("recorder"))
+        .args(&[
+            "echo",
+            "Timed mode verbose test",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+        ])
+        .output()
+        .expect("Failed to execute recorder");
+
+    // Play back in timed mode with verbose and high speed
+    let play_output = Command::new(binary_path("player"))
+        .args(&[&output_file, "--speed", "100.0", "--verbose"])
+        .output()
+        .expect("Failed to execute player");
+
+    assert!(play_output.status.success());
+    let stdout = String::from_utf8_lossy(&play_output.stdout);
+    
+    // Check verbose output for timed mode
+    assert!(stdout.contains("Session file"));
+    assert!(stdout.contains("Timing file"));
+    assert!(stdout.contains("Speed: 100"));
+    assert!(stdout.contains("Mode: Timed replay"));
+    assert!(stdout.contains("Starting timed replay"));
+    assert!(stdout.contains("Playback completed"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_player_with_corrupt_timing_file() {
+    let output_file = test_file_name("binary_player_corrupt.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // Create a valid output file
+    fs::write(&output_file, "Test content").unwrap();
+    
+    // Create a corrupt timing file
+    fs::write(&timing_file, "invalid timing data\nmore invalid data").unwrap();
+
+    // Try to play back - should fail
+    let play_output = Command::new(binary_path("player"))
+        .args(&[&output_file, "--timing", &timing_file])
+        .output()
+        .expect("Failed to execute player");
+
+    // Should fail due to corrupt timing data
+    assert!(!play_output.status.success());
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_recorder_non_verbose_success_message() {
+    let output_file = test_file_name("binary_recorder_non_verbose.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // Run recorder without verbose flag
+    let output = Command::new(binary_path("recorder"))
+        .args(&[
+            "echo",
+            "Non-verbose test",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+        ])
+        .output()
+        .expect("Failed to execute recorder");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    
+    // Check non-verbose output
+    assert!(stdout.contains("Starting recording"));
+    assert!(stdout.contains("Recording saved to"));
+    assert!(stdout.contains(&output_file));
+    assert!(stdout.contains(&timing_file));
+    
+    // Should NOT contain verbose-only messages
+    assert!(!stdout.contains("Recording command"));
+    assert!(!stdout.contains("Recording completed successfully"));
+    assert!(!stdout.contains("To replay, use"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_recorder_failure_with_permission_denied() {
+    use std::os::unix::fs::PermissionsExt;
+    
+    // Create a read-only directory
+    let test_dir = "test_readonly_recorder_dir";
+    let output_file = format!("{}/readonly.log", test_dir);
+    
+    fs::create_dir_all(test_dir).unwrap_or(());
+    
+    // Make directory read-only
+    let metadata = fs::metadata(test_dir).unwrap();
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(0o555); // r-xr-xr-x
+    fs::set_permissions(test_dir, permissions).unwrap_or(());
+    
+    // Try to record to read-only directory
+    let output = Command::new(binary_path("recorder"))
+        .args(&[
+            "echo",
+            "Permission test",
+            "--output",
+            &output_file,
+        ])
+        .output()
+        .expect("Failed to execute recorder");
+
+    // Should fail due to permission issues
+    assert!(!output.status.success());
+    
+    // Restore permissions and clean up
+    let mut permissions = fs::metadata(test_dir).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(test_dir, permissions).unwrap_or(());
+    fs::remove_dir_all(test_dir).unwrap_or(());
+}
+
+#[test]
+fn test_replay_record_non_verbose_message() {
+    let output_file = test_file_name("binary_replay_non_verbose.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // Run replay record without verbose flag
+    let output = Command::new(binary_path("replay"))
+        .args(&[
+            "record",
+            "echo",
+            "Replay non-verbose test",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+        ])
+        .output()
+        .expect("Failed to execute replay record");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    
+    // Check non-verbose output
+    assert!(stdout.contains("Starting recording"));
+    assert!(stdout.contains("Recording saved to"));
+    
+    // Should NOT contain verbose-only messages
+    assert!(!stdout.contains("Recording command"));
+    assert!(!stdout.contains("Recording completed successfully"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_replay_play_timed_mode_verbose() {
+    let output_file = test_file_name("binary_replay_timed_verbose.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // First record
+    let _record_output = Command::new(binary_path("replay"))
+        .args(&[
+            "record",
+            "echo",
+            "Timed verbose test",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+        ])
+        .output()
+        .expect("Failed to record");
+
+    // Play in timed mode with verbose and high speed
+    let play_output = Command::new(binary_path("replay"))
+        .args(&[
+            "play",
+            &output_file,
+            "--timing",
+            &timing_file,
+            "--speed",
+            "100.0",
+            "--verbose",
+        ])
+        .output()
+        .expect("Failed to execute replay play");
+
+    assert!(play_output.status.success());
+    let stdout = String::from_utf8_lossy(&play_output.stdout);
+    
+    // Check verbose timed mode output
+    assert!(stdout.contains("Speed: 100"));
+    assert!(stdout.contains("Mode: Timed replay"));
+    assert!(stdout.contains("Starting timed replay"));
+    assert!(stdout.contains("Playback completed"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_replay_record_failure() {
+    use std::os::unix::fs::PermissionsExt;
+    
+    // Create a read-only directory
+    let test_dir = "test_readonly_replay_dir";
+    let output_file = format!("{}/replay_readonly.log", test_dir);
+    
+    fs::create_dir_all(test_dir).unwrap_or(());
+    
+    // Make directory read-only
+    let metadata = fs::metadata(test_dir).unwrap();
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(0o555); // r-xr-xr-x
+    fs::set_permissions(test_dir, permissions).unwrap_or(());
+    
+    // Try to record to read-only directory
+    let output = Command::new(binary_path("replay"))
+        .args(&[
+            "record",
+            "echo",
+            "Permission test",
+            "--output",
+            &output_file,
+        ])
+        .output()
+        .expect("Failed to execute replay");
+
+    // Should fail due to permission issues
+    assert!(!output.status.success());
+    
+    // Restore permissions and clean up
+    let mut permissions = fs::metadata(test_dir).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(test_dir, permissions).unwrap_or(());
+    fs::remove_dir_all(test_dir).unwrap_or(());
+}
+
+#[test]
+fn test_replay_play_failure_nonexistent_files() {
+    let output = Command::new(binary_path("replay"))
+        .args(&["play", "nonexistent_replay_file.log"])
+        .output()
+        .expect("Failed to execute replay play");
+
+    // Should fail when files don't exist
+    assert!(!output.status.success());
+}
+
+#[test]
+fn test_recorder_command_args_error() {
+    // Test recorder with a command that has special characters
+    let output_file = test_file_name("binary_recorder_special_args.log");
+    
+    let output = Command::new(binary_path("recorder"))
+        .args(&[
+            "sh",
+            "-c",
+            "echo $'test\\nwith\\nnewlines'",
+            "--output",
+            &output_file,
+        ])
+        .output()
+        .expect("Failed to execute recorder");
+
+    if output.status.success() {
+        let content = fs::read_to_string(&output_file).unwrap();
+        assert!(content.contains("test"));
+    }
+    
+    cleanup_files(&[&output_file, &format!("{}.timing", output_file)]);
+}
+
+#[test]
+fn test_player_very_verbose_mode() {
+    let output_file = test_file_name("binary_player_very_verbose.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // First record
+    let _record_output = Command::new(binary_path("recorder"))
+        .args(&[
+            "echo",
+            "Very verbose test",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+        ])
+        .output()
+        .expect("Failed to record");
+
+    // Play without dump flag but with verbose - covers the else branch
+    let play_output = Command::new(binary_path("player"))
+        .args(&[
+            &output_file,
+            "--timing",
+            &timing_file,
+            "--speed",
+            "100.0",
+            "--verbose"
+        ])
+        .output()
+        .expect("Failed to execute player");
+
+    assert!(play_output.status.success());
+    let stdout = String::from_utf8_lossy(&play_output.stdout);
+    assert!(stdout.contains("Timed replay"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_replay_record_plain_text_verbose() {
+    let output_file = test_file_name("binary_replay_plain_verbose.log");
+
+    let output = Command::new(binary_path("replay"))
+        .args(&[
+            "record",
+            "echo",
+            "Plain text verbose",
+            "--output",
+            &output_file,
+            "--plain-text",
+            "--verbose",
+        ])
+        .output()
+        .expect("Failed to execute replay");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Plain text"));
+
+    cleanup_files(&[&output_file, &format!("{}.timing", output_file)]);
+}
+
+#[test]
+fn test_replay_play_dump_verbose() {
+    let output_file = test_file_name("binary_replay_dump_verbose.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // First record
+    let _record_output = Command::new(binary_path("replay"))
+        .args(&[
+            "record",
+            "echo",
+            "Dump verbose test",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+        ])
+        .output()
+        .expect("Failed to record");
+
+    // Play in dump mode with verbose
+    let play_output = Command::new(binary_path("replay"))
+        .args(&[
+            "play",
+            &output_file,
+            "--timing",
+            &timing_file,
+            "--dump",
+            "--verbose",
+        ])
+        .output()
+        .expect("Failed to execute replay play");
+
+    assert!(play_output.status.success());
+    let stdout = String::from_utf8_lossy(&play_output.stdout);
+    assert!(stdout.contains("Fast dump"));
+    assert!(stdout.contains("Fast dumping session content"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_recorder_default_shell() {
+    let output_file = test_file_name("binary_recorder_default_shell.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // Run recorder without command (should default to shell)
+    let mut child = Command::new(binary_path("recorder"))
+        .args(&[
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+            "--verbose"
+        ])
+        .env("SHELL", "/bin/bash") // Set a known shell for testing
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("Failed to execute recorder");
+
+    // Send exit command to the shell
+    if let Some(ref mut stdin) = child.stdin {
+        use std::io::Write;
+        writeln!(stdin, "echo 'Default shell test'").unwrap();
+        writeln!(stdin, "exit").unwrap();
+    }
+
+    let result = child.wait_with_output().expect("Failed to read output");
+    
+    // Should succeed
+    assert!(result.status.success());
+    
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(stdout.contains("/bin/bash"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_replay_record_default_shell() {
+    let output_file = test_file_name("binary_replay_default_shell.log");
+    let timing_file = format!("{}.timing", output_file);
+
+    // Run replay record without command (should default to shell)
+    let mut child = Command::new(binary_path("replay"))
+        .args(&[
+            "record",
+            "--output",
+            &output_file,
+            "--timing",
+            &timing_file,
+            "--verbose"
+        ])
+        .env("SHELL", "/bin/bash") // Set a known shell for testing
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("Failed to execute replay record");
+
+    // Send exit command to the shell
+    if let Some(ref mut stdin) = child.stdin {
+        use std::io::Write;
+        writeln!(stdin, "echo 'Default shell test'").unwrap();
+        writeln!(stdin, "exit").unwrap();
+    }
+
+    let result = child.wait_with_output().expect("Failed to read output");
+    
+    // Should succeed
+    assert!(result.status.success());
+    
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(stdout.contains("/bin/bash"));
+
+    cleanup_files(&[&output_file, &timing_file]);
+}
+
+#[test]
+fn test_player_default_session_file() {
+    // Create session.log and session.log.timing files
+    let default_output = "session.log";
+    let default_timing = "session.log.timing";
+
+    // First record to the default session file
+    let _record_output = Command::new(binary_path("recorder"))
+        .args(&["echo", "Default session test"])
+        .output()
+        .expect("Failed to record to default session");
+
+    // Now try to play without specifying session file (should use session.log)
+    let play_output = Command::new(binary_path("player"))
+        .args(&["--dump"])
+        .output()
+        .expect("Failed to execute player with default session");
+
+    if play_output.status.success() {
+        let stdout = String::from_utf8_lossy(&play_output.stdout);
+        assert!(stdout.contains("Default session test"));
+    } else {
+        // If files don't exist, that's expected - just verify the command accepts no args
+        let stderr = String::from_utf8_lossy(&play_output.stderr);
+        // Should not complain about missing session_file argument
+        assert!(!stderr.contains("required arguments"));
+    }
+
+    cleanup_files(&[default_output, default_timing]);
+}
+
+#[test]
+fn test_replay_play_default_session_file() {
+    // Create session.log and session.log.timing files
+    let default_output = "session.log";
+    let default_timing = "session.log.timing";
+
+    // First record to the default session file
+    let _record_output = Command::new(binary_path("replay"))
+        .args(&["record", "echo", "Default replay session test"])
+        .output()
+        .expect("Failed to record to default session");
+
+    // Now try to play without specifying session file (should use session.log)
+    let play_output = Command::new(binary_path("replay"))
+        .args(&["play", "--dump"])
+        .output()
+        .expect("Failed to execute replay play with default session");
+
+    if play_output.status.success() {
+        let stdout = String::from_utf8_lossy(&play_output.stdout);
+        assert!(stdout.contains("Default replay session test"));
+    } else {
+        // If files don't exist, that's expected - just verify the command accepts no args
+        let stderr = String::from_utf8_lossy(&play_output.stderr);
+        // Should not complain about missing session_file argument
+        assert!(!stderr.contains("required arguments"));
+    }
+
+    cleanup_files(&[default_output, default_timing]);
 }

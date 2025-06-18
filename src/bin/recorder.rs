@@ -14,9 +14,9 @@ use std::process::Command;
 #[command(about = "Record terminal sessions with timing data")]
 #[command(version = "0.1.0")]
 struct Cli {
-    /// Command to execute and record
+    /// Command to execute and record (defaults to current shell)
     #[arg(value_name = "COMMAND")]
-    command: String,
+    command: Option<String>,
 
     /// Arguments for the command
     #[arg(value_name = "ARGS")]
@@ -39,8 +39,24 @@ struct Cli {
     verbose: bool,
 }
 
+/// Get the default shell for the current platform
+fn get_default_shell() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("ComSpec").unwrap_or_else(|_| "powershell".to_string())
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // Determine command - use default shell if none specified
+    let command = cli.command.unwrap_or_else(get_default_shell);
 
     // Determine timing file name
     let timing_file = cli
@@ -50,7 +66,7 @@ fn main() -> Result<()> {
     if cli.verbose {
         println!(
             "📹 Recording command: {} {}",
-            cli.command,
+            command,
             cli.args.join(" ")
         );
         println!("📄 Output file: {}", cli.output);
@@ -70,7 +86,7 @@ fn main() -> Result<()> {
     let recorder = Recorder::new(&cli.output, &timing_file)?;
 
     // Build the command
-    let mut cmd = Command::new(&cli.command);
+    let mut cmd = Command::new(&command);
     cmd.args(&cli.args);
 
     // Record the command

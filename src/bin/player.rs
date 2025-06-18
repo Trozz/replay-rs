@@ -12,8 +12,8 @@ use replay_rs::Player;
 #[command(about = "Replay recorded terminal sessions with timing data")]
 #[command(version = "0.1.0")]
 struct Cli {
-    /// Session file to replay
-    #[arg(value_name = "SESSION_FILE")]
+    /// Session file to replay (defaults to session.log)
+    #[arg(value_name = "SESSION_FILE", default_value = "session.log")]
     session_file: String,
 
     /// Timing file for replay data
