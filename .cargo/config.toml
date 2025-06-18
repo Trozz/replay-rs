@@ -1,0 +1,68 @@
+# Cargo configuration for replay-rs
+# This file configures various aspects of the build and test process
+
+[alias]
+# Test aliases for different test types
+test-unit = "test --lib"
+test-integration = "test --test '*'"
+test-binary = "test --test binary_tests"
+test-examples = "test --test example_tests"
+test-all = "test --all-targets"
+test-quick = "test --lib --bins"
+
+# Benchmark aliases
+bench = "bench --bench performance_benchmarks"
+bench-recording = "bench --bench performance_benchmarks recording_commands"
+bench-replay = "bench --bench performance_benchmarks replay_performance"
+bench-ansi = "bench --bench performance_benchmarks ansi_cleaning"
+
+# Development aliases
+check-all = "check --all-targets --all-features"
+clippy-all = "clippy --all-targets --all-features -- -D warnings"
+fmt-check = "fmt --all -- --check"
+doc-check = "doc --no-deps --document-private-items"
+
+# Release preparation
+pre-release = ["fmt", "clippy-all", "test-all", "doc-check"]
+
+[env]
+# Environment variables for tests
+RUST_BACKTRACE = "1"
+RUST_LOG = "debug"
+
+# Test-specific environment variables
+REPLAY_RS_TEST_TIMEOUT = "30"
+REPLAY_RS_TEST_DIR = "/tmp/replay_rs_tests"
+
+[build]
+# Build configuration
+rustflags = ["-D", "warnings"]
+
+[target.'cfg(unix)']
+# Unix-specific configuration
+rustflags = ["-D", "warnings"]
+
+[target.'cfg(windows)']
+# Windows-specific configuration
+rustflags = ["-D", "warnings"]
+
+# Test runner configuration
+[test]
+# Increase timeout for integration tests that run actual commands
+timeout = 60
+
+[profile.test]
+# Optimizations for test builds
+opt-level = 1
+debug = true
+debug-assertions = true
+overflow-checks = true
+
+[profile.bench]
+# Optimizations for benchmarks
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = true
+codegen-units = 1

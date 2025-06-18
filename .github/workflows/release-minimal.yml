@@ -1,0 +1,233 @@
+name: Release (Minimal)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.0)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "v*-minimal"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+  discussions: write
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "tag_name=v${{ github.event.inputs.version }}-minimal" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get previous tag
+        id: previoustag
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## What's New (Minimal Release)
+
+          EOF
+
+          if [ -z "${{ steps.previoustag.outputs.previous_tag }}" ]; then
+            echo "Initial minimal release of Replay RS - Terminal Session Recording and Playback!" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "### Features" >> release_notes.md
+            echo "- Record terminal sessions with precise timing data" >> release_notes.md
+            echo "- Replay terminal sessions with original timing" >> release_notes.md
+            echo "- Compatible with scriptreplay and asciinema formats" >> release_notes.md
+            echo "- Multiple binaries: recorder, player, and replay utilities" >> release_notes.md
+          else
+            # Get commits since last tag
+            git log ${{ steps.previoustag.outputs.previous_tag }}..HEAD --pretty=format:"- %s" --reverse | grep -E "^- (feat|fix|perf|refactor):" | sed 's/^- feat:/- /' | sed 's/^- fix:/- /' | sed 's/^- perf:/- /' | sed 's/^- refactor:/- /' >> release_notes.md || echo "- Various improvements and bug fixes" >> release_notes.md
+          fi
+
+          echo "" >> release_notes.md
+          echo "### Supported Platforms (Minimal)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "This minimal release includes binaries for the most common platforms:" >> release_notes.md
+          echo "- macOS Apple Silicon (aarch64-apple-darwin)" >> release_notes.md
+          echo "- macOS Intel (x86_64-apple-darwin)" >> release_notes.md
+          echo "- Linux x86_64 (x86_64-unknown-linux-gnu)" >> release_notes.md
+          echo "- Linux ARM64 (aarch64-unknown-linux-gnu)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Installation" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Download the appropriate binaries for your platform below, make them executable, and move them to your PATH:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo "# Download all three binaries for your platform" >> release_notes.md
+          echo "chmod +x recorder-* player-* replay-*" >> release_notes.md
+          echo "sudo mv recorder-* /usr/local/bin/recorder" >> release_notes.md
+          echo "sudo mv player-* /usr/local/bin/player" >> release_notes.md
+          echo "sudo mv replay-* /usr/local/bin/replay" >> release_notes.md
+          echo '```' >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### Usage" >> release_notes.md
+          echo "" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo "# Record a terminal session" >> release_notes.md
+          echo "recorder output.log" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "# Replay a recorded session" >> release_notes.md
+          echo "player output.log" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "# Use the replay utility" >> release_notes.md
+          echo "replay --help" >> release_notes.md
+          echo '```' >> release_notes.md
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag_name }}
+          name: Replay RS ${{ steps.get_version.outputs.tag_name }}
+          body_path: ./release_notes.md
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-upload:
+    name: Build and Upload
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            cross: false
+          # macOS x86_64 (Intel)
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            cross: false
+          # Linux x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            cross: false
+          # Linux ARM64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            cross: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "tag_name=v${{ github.event.inputs.version }}-minimal" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        if: matrix.cross
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Update version in Cargo.toml
+        run: |
+          sed -i.bak 's/^version = .*/version = "${{ steps.get_version.outputs.version }}"/' Cargo.toml
+          rm -f Cargo.toml.bak
+        shell: bash
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
+
+      - name: Prepare Binaries
+        run: |
+          version="${{ steps.get_version.outputs.version }}"
+          target="${{ matrix.target }}"
+
+          # Copy and rename binaries
+          cp "target/$target/release/recorder" "recorder-$version-$target"
+          cp "target/$target/release/player" "player-$version-$target"
+          cp "target/$target/release/replay" "replay-$version-$target"
+
+          # Make executable
+          chmod +x "recorder-$version-$target"
+          chmod +x "player-$version-$target"
+          chmod +x "replay-$version-$target"
+
+          # Strip binaries to reduce size (ignore errors for cross-compiled binaries)
+          strip "recorder-$version-$target" 2>/dev/null || true
+          strip "player-$version-$target" 2>/dev/null || true
+          strip "replay-$version-$target" 2>/dev/null || true
+        shell: bash
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag_name }}
+          files: |
+            ./recorder-${{ steps.get_version.outputs.version }}-${{ matrix.target }}
+            ./player-${{ steps.get_version.outputs.version }}-${{ matrix.target }}
+            ./replay-${{ steps.get_version.outputs.version }}-${{ matrix.target }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-crates:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: [create-release, build-and-upload]
+    if: github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Get version
+        id: get_version
+        run: |
+          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update version in Cargo.toml
+        run: |
+          sed -i.bak 's/^version = .*/version = "${{ steps.get_version.outputs.version }}"/' Cargo.toml
+          rm -f Cargo.toml.bak
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
