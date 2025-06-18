@@ -93,7 +93,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.tag_name }}
           name: Replay RS ${{ steps.get_version.outputs.tag_name }}
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload Release Assets (Windows)
         if: runner.os == 'Windows'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.tag_name }}
           files: |
@@ -237,7 +237,7 @@ jobs:
 
       - name: Upload Release Assets (Unix)
         if: runner.os != 'Windows'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.tag_name }}
           files: |
