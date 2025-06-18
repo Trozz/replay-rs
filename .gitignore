@@ -156,3 +156,4 @@ book/
 .local/
 local.toml
 config.local.*
+*.log*
