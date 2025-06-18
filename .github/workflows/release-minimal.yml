@@ -7,9 +7,6 @@ on:
         description: "Version to release (e.g., 1.0.0)"
         required: true
         type: string
-  push:
-    tags:
-      - "v*-minimal"
 
 env:
   CARGO_TERM_COLOR: always

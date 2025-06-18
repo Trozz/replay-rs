@@ -1,19 +1,6 @@
 name: Security Audit
 
 on:
-  push:
-    branches: [ main, master ]
-    paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
-  schedule:
-    # Run security audit daily at 00:00 UTC
-    - cron: '0 0 * * *'
   workflow_dispatch:
 
 env:

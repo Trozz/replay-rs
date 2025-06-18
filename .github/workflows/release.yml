@@ -10,9 +10,6 @@ on:
       publish_crate:
         description: "Whether to publish the crate"
         type: boolean
-  push:
-    tags:
-      - "v*"
 
 env:
   CARGO_TERM_COLOR: always
