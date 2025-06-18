@@ -23,8 +23,8 @@ struct Cli {
     args: Vec<String>,
 
     /// Output file for session data
-    #[arg(short, long, default_value = "session.log")]
-    output: String,
+    #[arg(short, long)]
+    output: Option<String>,
 
     /// Timing file for replay data
     #[arg(short, long)]
@@ -33,6 +33,10 @@ struct Cli {
     /// Record in plain text format (removes problematic ANSI sequences)
     #[arg(short, long)]
     plain_text: bool,
+
+    /// Output in asciicast v2 format (single file, asciinema compatible)
+    #[arg(short, long)]
+    asciicast: bool,
 
     /// Verbose output
     #[arg(short, long)]
@@ -58,10 +62,22 @@ fn main() -> Result<()> {
     // Determine command - use default shell if none specified
     let command = cli.command.unwrap_or_else(get_default_shell);
 
-    // Determine timing file name
-    let timing_file = cli
-        .timing
-        .unwrap_or_else(|| format!("{}.timing", cli.output));
+    // Determine output file name with appropriate extension
+    let output_file = cli.output.unwrap_or_else(|| {
+        if cli.asciicast {
+            "session.cast".to_string()
+        } else {
+            "session.log".to_string()
+        }
+    });
+
+    // Determine timing file name (not used for asciicast format)
+    let timing_file = if cli.asciicast {
+        String::new() // Not used for asciicast
+    } else {
+        cli.timing
+            .unwrap_or_else(|| format!("{}.timing", output_file))
+    };
 
     if cli.verbose {
         println!(
@@ -69,11 +85,15 @@ fn main() -> Result<()> {
             command,
             cli.args.join(" ")
         );
-        println!("📄 Output file: {}", cli.output);
-        println!("⏱️  Timing file: {}", timing_file);
+        println!("📄 Output file: {}", output_file);
+        if !cli.asciicast {
+            println!("⏱️  Timing file: {}", timing_file);
+        }
         println!(
             "📝 Format: {}",
-            if cli.plain_text {
+            if cli.asciicast {
+                "Asciicast v2"
+            } else if cli.plain_text {
                 "Plain text"
             } else {
                 "Binary"
@@ -83,7 +103,7 @@ fn main() -> Result<()> {
     }
 
     // Create the recorder
-    let recorder = Recorder::new(&cli.output, &timing_file)?;
+    let recorder = Recorder::new(&output_file, &timing_file)?;
 
     // Build the command
     let mut cmd = Command::new(&command);
@@ -91,22 +111,41 @@ fn main() -> Result<()> {
 
     // Record the command
     println!("🎬 Starting recording...");
-    recorder.record_command(cmd, cli.plain_text)?;
+    if cli.asciicast {
+        // Build command string for metadata
+        let mut cmd_parts = vec![command.clone()];
+        cmd_parts.extend(cli.args.iter().cloned());
+        let command_str = cmd_parts.join(" ");
+        
+        recorder.record_command_asciicast_with_metadata(cmd, cli.plain_text, &command_str)?;
+    } else {
+        recorder.record_command(cmd, cli.plain_text)?;
+    }
 
     if cli.verbose {
         println!();
         println!("✅ Recording completed successfully!");
         println!("📂 Files created:");
-        println!("   📄 Session: {}", cli.output);
-        println!("   ⏱️  Timing: {}", timing_file);
+        println!("   📄 Session: {}", output_file);
+        if !cli.asciicast {
+            println!("   ⏱️  Timing: {}", timing_file);
+        }
         println!();
         println!("🎭 To replay, use:");
-        println!("   player {} --timing {}", cli.output, timing_file);
+        if cli.asciicast {
+            println!("   player {} --asciicast", output_file);
+        } else {
+            println!("   player {} --timing {}", output_file, timing_file);
+        }
     } else {
-        println!(
-            "✅ Recording saved to {} (timing: {})",
-            cli.output, timing_file
-        );
+        if cli.asciicast {
+            println!("✅ Recording saved to {} (asciicast format)", output_file);
+        } else {
+            println!(
+                "✅ Recording saved to {} (timing: {})",
+                output_file, timing_file
+            );
+        }
     }
 
     Ok(())

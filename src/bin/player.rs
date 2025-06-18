@@ -28,6 +28,10 @@ struct Cli {
     #[arg(short, long)]
     dump: bool,
 
+    /// Input is in asciicast format (auto-detected if not specified)
+    #[arg(short, long)]
+    asciicast: bool,
+
     /// Verbose output
     #[arg(short, long)]
     verbose: bool,
@@ -36,14 +40,27 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Determine timing file name
-    let timing_file = cli
-        .timing
-        .unwrap_or_else(|| format!("{}.timing", cli.session_file));
+    // Check if user explicitly provided timing file
+    let explicit_timing = cli.timing.is_some();
+    
+    // Determine timing file name (empty if asciicast format)
+    let timing_file = if cli.asciicast {
+        String::new() // Not used for asciicast
+    } else {
+        cli.timing
+            .unwrap_or_else(|| format!("{}.timing", cli.session_file))
+    };
+
+    // Auto-detect format if timing file doesn't exist but session file might be asciicast
+    let auto_detect_asciicast = !cli.asciicast && 
+        !explicit_timing && 
+        !std::path::Path::new(&timing_file).exists();
 
     if cli.verbose {
         println!("🎬 Session file: {}", cli.session_file);
-        println!("⏱️  Timing file: {}", timing_file);
+        if !cli.asciicast {
+            println!("⏱️  Timing file: {}", timing_file);
+        }
         if !cli.dump {
             println!("🚀 Speed: {}x", cli.speed);
         }
@@ -51,6 +68,8 @@ fn main() -> Result<()> {
             "📺 Mode: {}",
             if cli.dump {
                 "Fast dump"
+            } else if cli.asciicast {
+                "Asciicast replay"
             } else {
                 "Timed replay"
             }
@@ -58,8 +77,12 @@ fn main() -> Result<()> {
         println!();
     }
 
-    // Create the player
-    let player = Player::new(&timing_file, &cli.session_file)?;
+    // Create the player with auto-detection support
+    let player = if auto_detect_asciicast {
+        Player::new("", &cli.session_file)?
+    } else {
+        Player::new(&timing_file, &cli.session_file)?
+    };
 
     if cli.dump {
         // Fast dump mode
@@ -74,7 +97,11 @@ fn main() -> Result<()> {
             println!("🎭 Starting timed replay...");
             println!();
         }
-        player.replay(cli.speed)?;
+        if cli.asciicast || auto_detect_asciicast {
+            player.replay_format(cli.speed, true)?;
+        } else {
+            player.replay_format(cli.speed, false)?;
+        }
     }
 
     if cli.verbose {
