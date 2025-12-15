@@ -21,7 +21,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/registry
           key: ubuntu-latest-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
@@ -29,7 +29,7 @@ jobs:
             ubuntu-latest-cargo-registry-
 
       - name: Cache cargo index
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/git
           key: ubuntu-latest-cargo-index-${{ hashFiles('**/Cargo.lock') }}
@@ -37,7 +37,7 @@ jobs:
             ubuntu-latest-cargo-index-
 
       - name: Cache cargo target
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: target
           key: ubuntu-latest-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
